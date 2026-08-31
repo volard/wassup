@@ -5,6 +5,8 @@ lately without moving your contact notes out of Markdown. The app writes only
 the three optional scheduling properties below and validates the configured
 contact metadata fields when loading notes.
 
+![Wassup terminal demo](docs/demo.gif)
+
 ```yaml
 cnt:last-contact: 2026-08-28
 cnt:contact-every-days: 90
@@ -44,10 +46,6 @@ To build from source with Go 1.24 or newer:
 make build
 ./build/wassup --contacts /path/to/notes/resources/contacts
 ```
-
-Build artifacts stay in the ignored `build/` directory. Pushing a `v*` tag runs
-tests and publishes static Linux `amd64` and `arm64` binaries with SHA-256
-checksums to the corresponding GitHub Release.
 
 ## Configuration
 
