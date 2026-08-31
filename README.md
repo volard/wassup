@@ -1,8 +1,8 @@
 # wassup
 
-`wassup` is a small local terminal UI for remembering whom you may want to
-contact. Markdown contact notes remain the database. The app writes only the
-three optional scheduling properties below, and validates the configured
+`wassup` is a local terminal UI that reminds you who you have not spoken to
+lately without moving your contact notes out of Markdown. The app writes only
+the three optional scheduling properties below and validates the configured
 contact metadata fields when loading notes.
 
 ```yaml
@@ -14,6 +14,22 @@ cnt:snooze-until: 2026-09-15
 A note becomes scheduled when `cnt:contact-every-days` is present. Unscheduled
 notes remain visible under **All** and can be scheduled from the app.
 
+## Install
+
+Linux release binaries are available for `amd64` and `arm64`. Because the
+repository is private, authenticate the GitHub CLI before running the installer:
+
+```sh
+gh auth login
+gh api repos/volard/wassup/contents/install.sh \
+  -H "Accept: application/vnd.github.raw+json" | sh
+```
+
+The script verifies the release checksum and installs to `~/.local/bin/wassup`.
+Set `INSTALL_DIR` to choose another directory or `VERSION=v1.2.3` to install a
+specific release. The token returned by `gh auth token` must have access to this
+repository.
+
 ## Run
 
 On the first run, provide the contacts directory once:
@@ -23,19 +39,18 @@ wassup --contacts /path/to/notes/resources/contacts
 ```
 
 `wassup` creates a configuration file containing that absolute path. Later runs
-need no arguments:
+need no arguments.
+
+To build from source with Go 1.24 or newer:
 
 ```sh
-go run .
+make build
+./build/wassup --contacts /path/to/notes/resources/contacts
 ```
 
-Or build a standalone binary:
-
-```sh
-go build -o wassup .
-./wassup --contacts /path/to/notes/resources/contacts
-./wassup
-```
+Build artifacts stay in the ignored `build/` directory. Pushing a `v*` tag runs
+tests and publishes static Linux `amd64` and `arm64` binaries with SHA-256
+checksums to the corresponding GitHub Release.
 
 ## Configuration
 
@@ -119,7 +134,7 @@ namespaces remain available for unrelated note metadata.
 Validate every contact without opening the TUI:
 
 ```sh
-./wassup --check
+wassup --check
 ```
 
 A relative `contacts_dir` is resolved relative to the configuration file—not
@@ -128,7 +143,7 @@ the terminal's current directory.
 Use another config file with:
 
 ```sh
-./wassup --config /path/to/config.json
+wassup --config /path/to/config.json
 ```
 
 The `--contacts` flag and `WASSUP_CONTACTS` environment variable temporarily
@@ -139,7 +154,7 @@ You can also bootstrap the default directory through the environment:
 
 ```sh
 export WASSUP_CONTACTS=/path/to/notes/resources/contacts
-./wassup
+wassup
 ```
 
 When creating a config and no path override is supplied, `wassup` uses
@@ -150,7 +165,7 @@ When creating a config and no path override is supplied, `wassup` uses
 Install and enable the local daily reminder:
 
 ```sh
-./wassup --install-notifications
+wassup --install-notifications
 ```
 
 This creates a systemd user timer; it does not run a server or keep Wassup open.
@@ -163,7 +178,7 @@ PC was off run after the next login. A successful notification is recorded in
 Run the notification check manually with:
 
 ```sh
-./wassup --notify
+wassup --notify
 ```
 
 The default command uses `notify-send`. Arguments are executed directly without
