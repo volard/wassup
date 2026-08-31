@@ -16,19 +16,16 @@ notes remain visible under **All** and can be scheduled from the app.
 
 ## Install
 
-Linux release binaries are available for `amd64` and `arm64`. Because the
-repository is private, authenticate the GitHub CLI before running the installer:
+Linux release binaries are available for `amd64` and `arm64`:
 
 ```sh
-gh auth login
-gh api repos/volard/wassup/contents/install.sh \
-  -H "Accept: application/vnd.github.raw+json" | sh
+curl -fsSL https://raw.githubusercontent.com/volard/wassup/main/install.sh | sh
 ```
 
-The script verifies the release checksum and installs to `~/.local/bin/wassup`.
-Set `INSTALL_DIR` to choose another directory or `VERSION=v1.2.3` to install a
-specific release. The token returned by `gh auth token` must have access to this
-repository.
+The script downloads the latest release, verifies its checksum, and installs it
+to `~/.local/bin/wassup`. Set `INSTALL_DIR` to choose another directory or
+`VERSION=v1.2.3` to install a specific release. `GH_TOKEN` remains supported for
+authenticated downloads when needed.
 
 ## Run
 

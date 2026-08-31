@@ -20,15 +20,6 @@ case "$(uname -m)" in
     ;;
 esac
 
-if [ -z "$token" ] && command -v gh >/dev/null 2>&1; then
-  token=$(gh auth token 2>/dev/null || true)
-fi
-if [ -z "$token" ]; then
-  echo "wassup installer: set GH_TOKEN or authenticate with the GitHub CLI" >&2
-  echo "The token needs access to the private $repo repository." >&2
-  exit 1
-fi
-
 for command in curl sha256sum install mktemp; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "wassup installer: required command not found: $command" >&2
@@ -46,14 +37,21 @@ fi
 tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
 
-curl --fail --location --silent --show-error \
-  --header "Authorization: Bearer $token" \
-  --header "Accept: application/octet-stream" \
-  "$release_url/$asset" --output "$tmp_dir/$asset"
-curl --fail --location --silent --show-error \
-  --header "Authorization: Bearer $token" \
-  --header "Accept: application/octet-stream" \
-  "$release_url/$asset.sha256" --output "$tmp_dir/$asset.sha256"
+download() {
+  url=$1
+  output=$2
+  if [ -n "$token" ]; then
+    curl --fail --location --silent --show-error \
+      --header "Authorization: Bearer $token" \
+      "$url" --output "$output"
+  else
+    curl --fail --location --silent --show-error \
+      "$url" --output "$output"
+  fi
+}
+
+download "$release_url/$asset" "$tmp_dir/$asset"
+download "$release_url/$asset.sha256" "$tmp_dir/$asset.sha256"
 
 (
   cd "$tmp_dir"
