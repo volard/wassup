@@ -17,5 +17,6 @@
 # Go workspace file
 go.work
 
-# Legacy root build output
+# Build outputs
+/build/
 /wassup
