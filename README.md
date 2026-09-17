@@ -14,16 +14,14 @@ only changes its three scheduling fields.
 
 ## Quick start
 
-Install the latest Linux release (`amd64` or `arm64`):
+Install the latest Linux or macOS release (`amd64` or `arm64`):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/volard/wassup/main/install.sh | sh
 ```
 
-The installer verifies the release checksum and writes to
-`~/.local/bin/wassup`. Use `INSTALL_DIR` for another destination,
-`VERSION=v1.2.3` for a specific release, or `GH_TOKEN` when authentication is
-required.
+The installer verifies the published checksum and writes to
+`~/.local/bin/wassup`. Set `INSTALL_PATH` to install somewhere else.
 
 Point Wassup at your contact notes on first run:
 
