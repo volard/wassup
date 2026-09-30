@@ -20,3 +20,6 @@ go.work
 # Build outputs
 /build/
 /wassup
+
+# Local Telegram account credentials and sessions
+*.telegram/
