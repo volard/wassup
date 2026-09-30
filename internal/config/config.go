@@ -19,6 +19,11 @@ type Config struct {
 	Opener        Opener          `json:"opener"`
 	Notifications Notifications   `json:"notifications"`
 	Fields        contacts.Schema `json:"frontmatter_fields"`
+	Telegram      Telegram        `json:"telegram"`
+}
+
+type Telegram struct {
+	CheckEveryDays int `json:"check_every_days"`
 }
 
 type Opener struct {
@@ -37,6 +42,7 @@ func Default(contactsDir string) Config {
 	return Config{
 		ContactsDir: contactsDir,
 		StartView:   DefaultStartView,
+		Telegram:    Telegram{CheckEveryDays: 14},
 		Opener:      Opener{Command: []string{"nvim", "{path}"}},
 		Notifications: Notifications{
 			DailyAt:        "18:00",
@@ -81,6 +87,9 @@ func LoadOrCreate(path string, defaults Config) (Config, bool, error) {
 }
 
 func (c Config) Validate() error {
+	if c.Telegram.CheckEveryDays < 0 || c.Telegram.CheckEveryDays > 3650 {
+		return errors.New("telegram.check_every_days must be from 0 (manual only) to 3650")
+	}
 	if strings.TrimSpace(c.ContactsDir) == "" {
 		return errors.New("contacts_dir cannot be empty")
 	}
@@ -142,7 +151,7 @@ func load(path string) (Config, error) {
 	}
 	defer file.Close()
 
-	var result Config
+	result := Config{Telegram: Telegram{CheckEveryDays: 14}}
 	decoder := json.NewDecoder(file)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&result); err != nil {

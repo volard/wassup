@@ -156,3 +156,32 @@ func TestNotificationSettingsValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestTelegramCheckIntervalDefaultsAndExplicitValues(t *testing.T) {
+	for _, tc := range []struct {
+		field   string
+		want    int
+		invalid bool
+	}{
+		{"", 14, false},
+		{`,"telegram":{"check_every_days":7}`, 7, false},
+		{`,"telegram":{"check_every_days":0}`, 0, false},
+		{`,"telegram":{"check_every_days":-1}`, 0, true},
+	} {
+		path := filepath.Join(t.TempDir(), "config.json")
+		data := `{"contacts_dir":"/tmp","frontmatter_fields":{"display_name":"name","fallback_name":"alias","last_contact":"last","contact_every_days":"every","snooze_until":"snooze"}` + tc.field + `}`
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+		result, _, err := LoadOrCreate(path, Default("/tmp"))
+		if tc.invalid {
+			if err == nil {
+				t.Fatal("invalid interval accepted")
+			}
+			continue
+		}
+		if err != nil || result.Telegram.CheckEveryDays != tc.want {
+			t.Fatal(result.Telegram, err)
+		}
+	}
+}
