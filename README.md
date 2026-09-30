@@ -65,14 +65,37 @@ Use `wassup --check` to validate every note without opening the TUI.
 
 ## Configuration
 
-The generated config contains every supported setting and frontmatter mapping:
+Wassup creates `~/.config/wassup/config.json` on first run. Its default values
+look like this (remove comments before saving; the file accepts plain JSON):
 
-- `contacts_dir`: directory containing contact notes
-- `start_view`: `due`, `upcoming`, `keep_in_touch`, or `all`
-- `opener.command`: argument array used by `o`; must contain `{path}`
-- `frontmatter_fields`: contact keys and allowed relationship origins
-- `notifications`: reminder time, suggestion limit, and notification command
-- `telegram.check_every_days`: automatic account-check interval; defaults to 14, or 0 for manual only
+```jsonc
+{
+  "contacts_dir": "/path/to/contacts",
+  "start_view": "keep_in_touch", // due, upcoming, keep_in_touch, or all
+  "opener": { "command": ["nvim", "{path}"] }, // Used by `o`
+  "notifications": {
+    "daily_at": "18:00",
+    "max_suggestions": 1,
+    "command": ["notify-send", "--app-name=wassup", "--urgency=normal", "{title}", "{body}"]
+  },
+  "telegram": { "check_every_days": 14 }, // 0 disables automatic checks
+  "frontmatter_fields": {
+    "display_name": "cnt:name",
+    "fallback_name": "name",
+    "birth_date": "cnt:birth-date",
+    "relationship_origin": "rel:origin",
+    "relationship_context": "rel:context",
+    "photo": "cnt:photo",
+    "phone": "cnt:phone",
+    "email": "cnt:email",
+    "telegram": "cnt:telegram",
+    "last_contact": "cnt:last-contact",
+    "contact_every_days": "cnt:contact-every-days",
+    "snooze_until": "cnt:snooze-until",
+    "relationship_origins": ["family", "friend", "school", "university", "work"]
+  }
+}
+```
 
 Commands are executed directly, not through a shell. Relative `contacts_dir`
 paths resolve from the config directory. `--config` selects another config;
