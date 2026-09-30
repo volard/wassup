@@ -6,12 +6,14 @@ Set Height 700
 Set FontSize 18
 Set TypingSpeed 35ms
 
-Type "make build"
+Hide
+Type "./build/wassup --config /tmp/wassup-vhs-config.json --contacts docs/demo-contacts --check >/dev/null && clear"
 Enter
-Sleep 2s
-
 Type "./build/wassup --config /tmp/wassup-vhs-config.json --contacts docs/demo-contacts"
 Enter
+Sleep 1s
+Show
+
 Sleep 2s
 
 Tab
@@ -27,6 +29,4 @@ Enter
 Sleep 2s
 Escape
 Escape
-Sleep 1s
-
-Type "q"
+Sleep 2s
