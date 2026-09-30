@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -13,6 +16,7 @@ import (
 	"wassup/internal/config"
 	"wassup/internal/contacts"
 	"wassup/internal/notifications"
+	telegramsync "wassup/internal/telegram"
 	"wassup/internal/ui"
 )
 
@@ -26,7 +30,19 @@ func main() {
 	check := flag.Bool("check", false, "validate contact frontmatter and exit")
 	notify := flag.Bool("notify", false, "send today's due-contact desktop notification and exit")
 	installNotifications := flag.Bool("install-notifications", false, "install and enable the daily desktop notification timer")
+	flag.Usage = func() {
+		fmt.Fprintln(flag.CommandLine.Output(), "Usage: wassup [options] [telegram login|link|sync|help]")
+		flag.PrintDefaults()
+	}
 	flag.Parse()
+	if flag.NArg() > 0 {
+		if flag.Arg(0) != "telegram" {
+			fatal(fmt.Errorf("unknown command %q", flag.Arg(0)))
+		}
+		if enabledFlags(*check, *notify, *installNotifications) > 0 {
+			fatal(errors.New("telegram cannot be combined with --check, --notify, or --install-notifications"))
+		}
+	}
 	if enabledFlags(*check, *notify, *installNotifications) > 1 {
 		fatal(errors.New("use only one of --check, --notify, or --install-notifications"))
 	}
@@ -54,6 +70,14 @@ func main() {
 		if err != nil {
 			fatal(fmt.Errorf("contacts directory override: %w", err))
 		}
+	}
+	if flag.NArg() > 0 {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if err := telegramsync.Run(ctx, flag.Args()[1:], absConfigPath, contactsDir, settings.Fields, os.Stdin, os.Stdout, os.Stderr); err != nil {
+			fatal(err)
+		}
+		return
 	}
 	info, err := os.Stat(contactsDir)
 	if err != nil {
