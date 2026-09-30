@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"sort"
@@ -13,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"wassup/internal/contacts"
+	telegramsync "wassup/internal/telegram"
 )
 
 type viewMode int
@@ -32,25 +34,44 @@ const (
 	inputSnooze
 	inputSchedule
 	inputContactDate
+	inputTelegram
+	inputTelegramConfirm
+	inputTelegramWaiting
 )
 
 type Model struct {
-	dir        string
-	schema     contacts.Schema
-	opener     []string
-	contacts   []contacts.Contact
-	warnings   []error
-	view       viewMode
-	input      inputMode
-	query      string
-	inputValue string
-	cursor     int
-	width      int
-	height     int
-	preview    bool
-	status     string
-	statusErr  bool
-	today      time.Time
+	dir                         string
+	schema                      contacts.Schema
+	opener                      []string
+	contacts                    []contacts.Contact
+	warnings                    []error
+	view                        viewMode
+	input                       inputMode
+	query                       string
+	inputValue                  string
+	cursor                      int
+	width                       int
+	height                      int
+	preview                     bool
+	status                      string
+	statusErr                   bool
+	today                       time.Time
+	telegram                    TelegramService
+	telegramLinks               map[string]telegramsync.LinkStatus
+	telegramTarget              contacts.Contact
+	telegramOriginal            string
+	telegramCandidate           telegramsync.Candidate
+	telegramRequest             uint64
+	telegramBusy                bool
+	telegramCancel              context.CancelFunc
+	telegramInit                tea.Cmd
+	telegramCheckDays           int
+	telegramKind                string
+	telegramStarted             time.Time
+	telegramElapsed             time.Duration
+	telegramPhase               string
+	telegramDone, telegramTotal int
+	telegramProgress            chan telegramsync.Progress
 }
 
 var (
@@ -90,15 +111,22 @@ func viewFromName(name string) viewMode {
 	}
 }
 
-func (m Model) Init() tea.Cmd { return nil }
+func (m Model) Init() tea.Cmd { return m.telegramInit }
 
 func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := message.(type) {
+	case telegramTick:
+		return m.telegramTicked(msg)
+	case telegramResult:
+		return m.telegramFinished(msg)
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		return m, nil
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
+			if m.telegramCancel != nil {
+				m.telegramCancel()
+			}
 			return m, tea.Quit
 		}
 		if m.input != inputNone {
@@ -121,7 +149,18 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	visible := m.visible()
 	switch msg.String() {
 	case "q":
+		if m.telegramCancel != nil {
+			m.telegramCancel()
+		}
 		return m, tea.Quit
+	case "t":
+		return m.editTelegram()
+	case "v":
+		if len(visible) > 0 && !m.telegramBusy {
+			return m.checkTelegram([]contacts.Contact{visible[m.cursor]}, true)
+		}
+	case "V":
+		return m.checkTelegram(m.contacts, true)
 	case "up", "k":
 		if m.cursor > 0 {
 			m.cursor--
@@ -190,7 +229,13 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		m.reload()
 		m.status, m.statusErr = "Reloaded contact notes", false
+		m.loadTelegramSnapshot()
+		return m.checkTelegram(m.contacts, false)
 	case "esc":
+		if m.telegramBusy {
+			m.cancelTelegram()
+			return m, nil
+		}
 		if m.preview {
 			m.preview = false
 		} else if m.query != "" {
@@ -201,11 +246,26 @@ func (m Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if (m.input == inputTelegramWaiting || m.input == inputTelegramConfirm) && msg.String() != "esc" && msg.String() != "enter" {
+		return m, nil
+	}
 	switch msg.String() {
 	case "esc":
+		if m.input == inputTelegramWaiting && m.telegramCancel != nil {
+			m.cancelTelegram()
+		}
 		m.input, m.inputValue = inputNone, ""
 		return m, nil
 	case "enter":
+		if m.input == inputTelegramWaiting {
+			return m, nil
+		}
+		if m.input == inputTelegram {
+			return m.resolveTelegram()
+		}
+		if m.input == inputTelegramConfirm {
+			return m.saveTelegram()
+		}
 		if m.input == inputSearch {
 			m.input = inputNone
 			return m, nil
@@ -245,6 +305,8 @@ func (m Model) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.input == inputSearch && !unicode.IsControl(r) {
 			m.query += string(r)
 			m.cursor = 0
+		} else if m.input == inputTelegram && !unicode.IsControl(r) {
+			m.inputValue += string(r)
 		} else if (m.input == inputSnooze || m.input == inputSchedule) && unicode.IsDigit(r) {
 			m.inputValue += string(r)
 		} else if m.input == inputContactDate && (unicode.IsDigit(r) || r == '-') {
@@ -373,7 +435,17 @@ func (m Model) View() string {
 	out.WriteString("\n\n")
 
 	visible := m.visible()
-	contentHeight := max(3, m.height-9)
+	footer := m.footer()
+	footerHeight := 0
+	for line := range strings.Lines(footer) {
+		footerHeight += max(1, (lipgloss.Width(strings.TrimSuffix(line, "\n"))+max(1, m.width)-1)/max(1, m.width))
+	}
+	contentHeight := max(1, m.height-6-footerHeight)
+	narrowPreview := ""
+	if m.preview && len(visible) > 0 && m.width < 100 {
+		narrowPreview = m.previewView(visible[m.cursor], min(m.width, 100), min(10, max(3, m.height/3)))
+		contentHeight = max(1, contentHeight-lipgloss.Height(narrowPreview)-2)
+	}
 	if m.preview && len(visible) > 0 && m.width >= 100 {
 		leftWidth := max(48, m.width*52/100)
 		rightWidth := max(40, m.width-leftWidth-2)
@@ -382,13 +454,13 @@ func (m Model) View() string {
 		out.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, listPane, "  ", previewPane))
 	} else {
 		out.WriteString(m.listView(visible, m.width, contentHeight))
-		if m.preview && len(visible) > 0 {
+		if narrowPreview != "" {
 			out.WriteString("\n\n")
-			out.WriteString(m.previewView(visible[m.cursor], min(m.width, 100), min(10, max(3, m.height/3))))
+			out.WriteString(narrowPreview)
 		}
 	}
 	out.WriteByte('\n')
-	out.WriteString(m.footer())
+	out.WriteString(footer)
 	return out.String()
 }
 
@@ -398,6 +470,10 @@ func (m Model) listView(visible []contacts.Contact, width, limit int) string {
 	}
 	var out strings.Builder
 	start := 0
+	showMore := len(visible) > limit && limit > 1
+	if showMore {
+		limit--
+	}
 	if m.cursor >= limit {
 		start = m.cursor - limit + 1
 	}
@@ -408,7 +484,7 @@ func (m Model) listView(visible []contacts.Contact, width, limit int) string {
 			out.WriteByte('\n')
 		}
 	}
-	if end < len(visible) {
+	if end < len(visible) && showMore {
 		out.WriteString(dimStyle.Render(fmt.Sprintf("  … %d more", len(visible)-end)))
 	}
 	return out.String()
@@ -445,7 +521,7 @@ func (m Model) row(contact contacts.Contact, selected bool, width int) string {
 	if selected {
 		prefix = cursorStyle.Render("› ")
 	}
-	nameWidth := min(36, max(12, width-31))
+	nameWidth := min(36, max(12, width-34))
 	name := truncate(contact.Name, nameWidth)
 	name = lipgloss.NewStyle().Width(nameWidth).Render(name)
 	due := "           "
@@ -454,7 +530,7 @@ func (m Model) row(contact contacts.Contact, selected bool, width int) string {
 		due = contact.DueDate(m.today).Format("02 Jan 2006")
 		status = dueLabel(contact.DaysUntil(m.today))
 	}
-	return fmt.Sprintf("%s%s  %s  %s", prefix, name, due, status)
+	return fmt.Sprintf("%s%s%s  %s  %s", prefix, m.telegramBadge(contact.Path), name, due, status)
 }
 
 func dueLabel(days int) string {
@@ -471,7 +547,11 @@ func dueLabel(days int) string {
 }
 
 func (m Model) previewView(contact contacts.Contact, width, maxLines int) string {
-	lines := strings.Split(contact.Note, "\n")
+	contentText := contact.Note
+	if details := m.telegramDetails(contact); details != "" {
+		contentText = details + "\n\n" + contentText
+	}
+	lines := strings.Split(contentText, "\n")
 	if len(lines) > maxLines {
 		lines = append(lines[:maxLines], "…")
 	}
@@ -483,6 +563,8 @@ func (m Model) previewView(contact contacts.Contact, width, maxLines int) string
 func (m Model) footer() string {
 	var prompt string
 	switch m.input {
+	case inputTelegram, inputTelegramConfirm, inputTelegramWaiting:
+		prompt = m.telegramPrompt()
 	case inputSearch:
 		prompt = "Search: " + m.query + "█  " + dimStyle.Render("enter accept · esc cancel")
 	case inputSnooze:
@@ -492,7 +574,13 @@ func (m Model) footer() string {
 	case inputContactDate:
 		prompt = "Last contacted (YYYY-MM-DD): " + m.inputValue + "█  " + dimStyle.Render("blank means today · enter apply · esc cancel")
 	default:
-		prompt = dimStyle.Render("j/k move · tab or [ ] views · / search · enter preview · o open · a schedule · x remove · d contacted · s snooze · r reload · q quit")
+		prompt = dimStyle.Render("j/k move · tab or [ ] views · / search · enter preview · o open · t Telegram · v verify · V verify all · a schedule · x remove · d contacted · s snooze · r reload · q quit")
+		if len(m.telegramLinks) > 0 {
+			prompt += "\n" + dimStyle.Render("Telegram: ✈✓ verified · ✈~ details changed · ✈? unchecked · ✈! unavailable")
+		}
+	}
+	if m.telegramBusy {
+		prompt += "\n" + todayStyle.Render(m.telegramActivity())
 	}
 	if m.query != "" && m.input != inputSearch {
 		prompt += "\n" + dimStyle.Render("Filter: ") + m.query
@@ -507,7 +595,7 @@ func (m Model) footer() string {
 	if len(m.warnings) > 0 {
 		prompt += "\n" + errorStyle.Render(fmt.Sprintf("%d note(s) skipped because of invalid scheduling fields", len(m.warnings)))
 	}
-	return prompt
+	return lipgloss.NewStyle().Width(max(1, m.width)).Render(prompt)
 }
 
 func (m *Model) setError(err error) {

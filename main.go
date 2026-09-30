@@ -139,7 +139,9 @@ func main() {
 	if created {
 		status = "Created configuration: " + absConfigPath
 	}
-	program := tea.NewProgram(ui.New(contactsDir, settings.Fields, settings.StartView, settings.Opener.Command, status), tea.WithAltScreen())
+	model := ui.New(contactsDir, settings.Fields, settings.StartView, settings.Opener.Command, status).
+		WithTelegram(telegramsync.Service{ConfigPath: absConfigPath, Schema: settings.Fields}, settings.Telegram.CheckEveryDays)
+	program := tea.NewProgram(model, tea.WithAltScreen())
 	if _, err := program.Run(); err != nil {
 		fatal(err)
 	}
