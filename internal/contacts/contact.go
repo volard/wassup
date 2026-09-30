@@ -89,6 +89,9 @@ func (s Schema) Validate() error {
 type Contact struct {
 	Path        string
 	Name        string
+	Telegram    string
+	Phone       string
+	BirthDate   string
 	Tracked     bool
 	LastContact *time.Time
 	EveryDays   int

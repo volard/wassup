@@ -6,9 +6,34 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
+
+// SetTelegramIdentity records explicitly confirmed Telegram details, preserving
+// scheduling fields and leaving phone numbers unchanged when Telegram hides them.
+func SetTelegramIdentity(path, handle, number string, schema Schema) error {
+	if err := schema.Validate(); err != nil {
+		return err
+	}
+	if _, _, err := read(path, schema); err != nil {
+		return err
+	}
+	if strings.ContainsAny(handle+number, "\r\n") {
+		return fmt.Errorf("Telegram details cannot contain newlines")
+	}
+	changes := map[string]*string{schema.Telegram: nil}
+	if handle != "" {
+		value := strconv.Quote("@" + strings.TrimPrefix(handle, "@"))
+		changes[schema.Telegram] = &value
+	}
+	if number != "" {
+		value := strconv.Quote(number)
+		changes[schema.Phone] = &value
+	}
+	return updateFields(path, changes)
+}
 
 func MarkContacted(path string, today time.Time, schema Schema) error {
 	if err := schema.Validate(); err != nil {
@@ -19,6 +44,26 @@ func MarkContacted(path string, today time.Time, schema Schema) error {
 		schema.LastContact: &value,
 		schema.SnoozeUntil: nil,
 	})
+}
+
+// AdvanceLastContact imports a date without clearing snoozes or moving a newer
+// local date backwards. Re-read the note because a sync may take some time.
+func AdvanceLastContact(path string, date time.Time, schema Schema) (bool, error) {
+	if err := schema.Validate(); err != nil {
+		return false, err
+	}
+	current, _, err := read(path, schema)
+	if err != nil {
+		return false, err
+	}
+	value := date.In(time.Local).Format(dateLayout)
+	if current.LastContact != nil && current.LastContact.Format(dateLayout) >= value {
+		return false, nil
+	}
+	if err := updateFields(path, map[string]*string{schema.LastContact: &value}); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func Snooze(path string, today time.Time, days int, schema Schema) error {

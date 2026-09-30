@@ -80,11 +80,17 @@ func read(path string, schema Schema) (Contact, bool, error) {
 	}
 
 	displayName, _ := fieldValue(frontmatter, schema.DisplayName)
+	telegram, _ := fieldValue(frontmatter, schema.Telegram)
+	phone, _ := fieldValue(frontmatter, schema.Phone)
+	birthday, _ := fieldValue(frontmatter, schema.BirthDate)
 	fallbackName, _ := fieldValue(frontmatter, schema.FallbackName)
 	name := firstNonempty(displayName, heading(body), fallbackName, strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)))
 	return Contact{
 		Path:        path,
 		Name:        name,
+		Telegram:    telegram,
+		Phone:       phone,
+		BirthDate:   birthday,
 		Tracked:     tracked,
 		LastContact: last,
 		EveryDays:   everyDays,
