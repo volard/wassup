@@ -1,8 +1,8 @@
 # wassup
 
-[![CI](https://github.com/volard/wassup/actions/workflows/release.yml/badge.svg)](https://github.com/volard/wassup/actions/workflows/release.yml)
-[![Go 1.24+](https://img.shields.io/badge/Go-1.24%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+![CI](https://github.com/volard/wassup/actions/workflows/release.yml/badge.svg)
+![Go 1.24+](https://img.shields.io/badge/Go-1.24%2B-00ADD8?logo=go&logoColor=white)
+![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 
 A local TUI that reminds you who you have not spoken to lately—without moving
 your contact notes out of Markdown.
@@ -20,8 +20,7 @@ Install the latest Linux or macOS release (`amd64` or `arm64`):
 curl -fsSL https://raw.githubusercontent.com/volard/wassup/main/install.sh | sh
 ```
 
-The installer verifies the published checksum and writes to
-`~/.local/bin/wassup`. Set `INSTALL_PATH` to install somewhere else.
+Binary is saved by default at `~/.local/bin/wassup`. Set `INSTALL_PATH` to install somewhere else.
 
 Point Wassup at your contact notes on first run:
 
@@ -34,18 +33,14 @@ The path is saved in `~/.config/wassup/config.json`; later runs need only
 
 ### Build from source
 
-Requires Go 1.24 or newer:
-
 ```sh
 make build
 ./build/wassup --contacts /path/to/contacts
 ```
 
-Build output stays in the ignored `build/` directory.
-
 ## Contact notes
 
-Each contact is a Markdown file with frontmatter:
+Each contact is a Markdown file with frontmatter. For example:
 
 ```yaml
 ---
@@ -63,10 +58,11 @@ accept `--MM-DD` when the year is unknown.
 
 Use `wassup --check` to validate every note without opening the TUI.
 
+Fields could be changed in configuration.
+
 ## Configuration
 
-Wassup creates `~/.config/wassup/config.json` on first run. Its default values
-look like this (remove comments before saving; the file accepts plain JSON):
+Wassup creates `~/.config/wassup/config.json` on first run
 
 ```jsonc
 {
@@ -133,15 +129,17 @@ to check one contact or `V` to check all now. Set
 `telegram.check_every_days` to `0` for manual checks only. Sync itself runs only
 when requested.
 
-## Optional notifications
+## Notifications
 
-Notifications require Linux, a systemd user session, and `notify-send`. The TUI
-itself does not require systemd.
+Requirements:
+
+- Linux
+- systemd user session
+- `notify-send`
+
+Can be enabled with:
 
 ```sh
 wassup --install-notifications
 ```
 
-This installs a persistent daily user timer—no server or background Wassup
-process. Run `wassup --notify` to trigger the check manually. Successful sends
-are recorded once per local day to avoid duplicates.
